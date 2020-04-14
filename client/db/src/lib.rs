@@ -295,6 +295,54 @@ pub enum DatabaseSettingsSrc {
 	Custom(Arc<dyn KeyValueDB>),
 }
 
+/// Configuration state transition for offchain indexing change.
+///
+/// A helper type to simplify match statements regarding verification
+/// matrix derive.
+#[derive(PartialEq,Eq,Debug,Clone,Copy)]
+enum OffchainIndexingConfigChange {
+	/// Transition from `Enabled` to `Disabled`.
+	OnToOff,
+	/// Transition from `Disabled` to `Enabled`.
+	OffToOn,
+	/// No change.
+	None,
+	/// Transition is undefined, since there was no prior value in the database.
+	Undefined,
+}
+
+impl From<(Option<bool>,bool)> for OffchainIndexingConfigChange {
+	fn from(previous_and_next: (Option<bool>,bool)) -> Self {
+		match previous_and_next {
+			(Some(true), false) => Self::OnToOff,
+			(Some(false), true) => Self::OffToOn,
+			(Some(true), true) => Self::None,
+			(Some(false), false) => Self::None,
+			(None, _) => Self::Undefined,
+		}
+	}
+}
+
+/// Validate status against in DB stored flag value for indexing and update the state in the meta DB.
+///
+/// Indexing shall not change in between executions.
+fn make_config_stateful(config: &sc_client::ClientConfig, db: &dyn KeyValueDB) -> Result<(), sp_blockchain::Error> {
+	// currently this only applies to offchain config
+	let previous = crate::read_db_offchain_indexing(db)?;
+	let oicst = OffchainIndexingConfigChange::from((previous, config.offchain_worker_enabled));
+
+	match oicst {
+		OffchainIndexingConfigChange::OnToOff =>
+			panic!("The DB requires indexing to be enabled. Start a separate DB or use ForceDisable, but be aware that re-enabling will require re-sync"),
+		OffchainIndexingConfigChange::OffToOn =>
+			panic!("Re-sync required due to config change of offchain indexing"),
+		OffchainIndexingConfigChange::Undefined | OffchainIndexingConfigChange::None => {
+			let _ = crate::update_db_offchain_indexing(db, config.offchain_worker_enabled)?;
+		},
+	}
+	Ok(())
+}
+
 /// Create an instance of db-backed client.
 pub fn new_client<E, Block, RA>(
 	settings: DatabaseSettings,
@@ -321,7 +369,13 @@ pub fn new_client<E, Block, RA>(
 		Block: BlockT,
 		E: CodeExecutor + RuntimeInfo,
 {
-	let backend = Arc::new(Backend::new(settings, CANONICALIZATION_DELAY)?);
+	let backend = Backend::new(settings, CANONICALIZATION_DELAY)?;
+
+	let kvdb = backend.as_key_value_db();
+	make_config_stateful(&config, kvdb.as_ref())?;
+
+	let backend = Arc::new(backend);
+
 	let executor = sc_client::LocalCallExecutor::new(backend.clone(), executor, spawn_handle, config.clone());
 	Ok((
 		sc_client::Client::new(
@@ -913,6 +967,13 @@ impl<Block: BlockT> Backend<Block> {
 		inmem.finalize_block(BlockId::Hash(info.finalized_hash), None).unwrap();
 
 		inmem
+	}
+
+	/// Returns a reference to the underlying key value db.
+	///
+	/// MUST only be used for configuration value persistence.
+	pub fn as_key_value_db(&self) -> Arc<dyn KeyValueDB> {
+		self.storage.db.clone()
 	}
 
 	/// Returns total number of blocks (headers) in the block DB.
