@@ -52,9 +52,12 @@ pub struct OffchainWorkerParams {
 	/// DB during block import.
     #[structopt(
         long = "enable-offchain-indexing",
-        value_name = "ENABLE_OFFCHAIN_INDEXING"
+		value_name = "ENABLE_OFFCHAIN_INDEXING",
+		possible_values = &OffchainWorkerEnabled::variants(),
+		case_insensitive = true,
+		default_value = "WhenValidating"
     )]
-	pub indexing_enabled: bool,
+	pub indexing_enabled: OffchainWorkerEnabled,
 }
 
 impl OffchainWorkerParams {
@@ -71,7 +74,13 @@ impl OffchainWorkerParams {
 			(OffchainWorkerEnabled::WhenValidating, _) => false,
 		};
 
-        let indexing_enabled = enabled && self.indexing_enabled;
+        let indexing_enabled = match (&self.indexing_enabled, role) {
+			(OffchainWorkerEnabled::WhenValidating, Role::Authority { .. }) => true,
+			(OffchainWorkerEnabled::Always, _) => true,
+			(OffchainWorkerEnabled::Never, _) => false,
+			(OffchainWorkerEnabled::WhenValidating, _) => false,
+		};
+        let indexing_enabled = enabled && indexing_enabled;
 
         Ok(OffchainWorkerConfig { enabled, indexing_enabled})
 	}
