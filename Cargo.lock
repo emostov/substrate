@@ -5831,6 +5831,7 @@ dependencies = [
  "regex",
  "rpassword",
  "sc-client-api",
+ "sc-client-db",
  "sc-informant",
  "sc-network",
  "sc-service",

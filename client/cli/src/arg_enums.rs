@@ -133,6 +133,17 @@ arg_enum! {
 	}
 }
 
+arg_enum! {
+	/// Whether off-chain workers are enabled.
+	#[allow(missing_docs)]
+	#[derive(Debug, Clone)]
+	pub enum OffchainIndexingEnabled {
+		Always,
+		Never,
+		WhenValidating,
+	}
+}
+
 /// Default value for the `--execution-syncing` parameter.
 pub const DEFAULT_EXECUTION_SYNCING: ExecutionStrategy = ExecutionStrategy::NativeElseWasm;
 /// Default value for the `--execution-import-block` parameter.
