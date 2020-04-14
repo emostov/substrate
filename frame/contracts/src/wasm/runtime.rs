@@ -16,11 +16,11 @@
 
 //! Environment definition of the wasm smart-contract runtime.
 
-use crate::{Schedule, Trait, CodeHash, ComputeDispatchFee, BalanceOf};
+use crate::{Schedule, Trait, CodeHash, BalanceOf};
 use crate::exec::{
 	Ext, ExecResult, ExecError, ExecReturnValue, StorageKey, TopicOf, STATUS_SUCCESS,
 };
-use crate::gas::{Gas, GasMeter, Token, GasMeterResult, approx_gas_for_balance};
+use crate::gas::{Gas, GasMeter, Token, GasMeterResult};
 use sp_sandbox;
 use frame_system;
 use sp_std::{prelude::*, mem, convert::TryInto};
@@ -32,6 +32,8 @@ use sp_io::hashing::{
 	blake2_128,
 	sha2_256,
 };
+use frame_support::weights::GetDispatchInfo;
+use pallet_transaction_payment::Module as Payment;
 
 /// The value returned from ext_call and ext_instantiate contract external functions if the call or
 /// instantiation traps. This value is chosen as if the execution does not trap, the return value
@@ -689,10 +691,10 @@ define_env!(Env, <E: Ext>,
 
 	// Stores the gas price for the current transaction into the scratch buffer.
 	//
-	// The data is encoded as T::Balance. The current contents of the scratch buffer are overwritten.
+	// The data is encoded as u64. The current contents of the scratch buffer are overwritten.
 	ext_gas_price(ctx) => {
 		ctx.scratch_buf.clear();
-		ctx.gas_meter.gas_price().encode_to(&mut ctx.scratch_buf);
+		Payment::<E::T>::weight_to_fee_with_adjustment::<u64>(1).encode_to(&mut ctx.scratch_buf);
 		Ok(())
 	},
 
@@ -783,16 +785,16 @@ define_env!(Env, <E: Ext>,
 		let call: <<E as Ext>::T as Trait>::Call =
 			read_sandbox_memory_as(ctx, call_ptr, call_len)?;
 
+		let info = call.get_dispatch_info();
+
 		// Charge gas for dispatching this call.
-		let fee = {
-			let balance_fee = <<E as Ext>::T as Trait>::ComputeDispatchFee::compute_dispatch_fee(&call);
-			approx_gas_for_balance(ctx.gas_meter.gas_price(), balance_fee)
-		};
+		// We only need to charge the weight as the len was already billed when
+		// copying the encoded call from the sandbox.
 		charge_gas(
 			&mut ctx.gas_meter,
 			ctx.schedule,
 			&mut ctx.special_trap,
-			RuntimeToken::ComputedDispatchFee(fee)
+			RuntimeToken::ComputedDispatchFee(info.weight)
 		)?;
 
 		ctx.ext.note_dispatch_call(call);

@@ -22,14 +22,14 @@
 use crate::{
 	BalanceOf, ComputeDispatchFee, ContractAddressFor, ContractInfo, ContractInfoOf, GenesisConfig,
 	Module, RawAliveContractInfo, RawEvent, Trait, TrieId, TrieIdFromParentCounter, Schedule,
-	TrieIdGenerator, CheckBlockGasLimit, account_db::{AccountDb, DirectAccountDb, OverlayAccountDb},
+	TrieIdGenerator, account_db::{AccountDb, DirectAccountDb, OverlayAccountDb},
 };
 use assert_matches::assert_matches;
 use hex_literal::*;
 use codec::{Decode, Encode, KeyedVec};
 use sp_runtime::{
 	Perbill, BuildStorage, transaction_validity::{InvalidTransaction, ValidTransaction},
-	traits::{BlakeTwo256, Hash, IdentityLookup, SignedExtension},
+	traits::{BlakeTwo256, Hash, IdentityLookup, SignedExtension, Convert},
 	testing::{Digest, DigestItem, Header, UintAuthorityId, H256},
 };
 use frame_support::{
@@ -142,24 +142,37 @@ parameter_types! {
 	pub const RentByteFee: u64 = 4;
 	pub const RentDepositOffset: u64 = 10_000;
 	pub const SurchargeReward: u64 = 150;
-	pub const TransactionBaseFee: u64 = 2;
-	pub const TransactionByteFee: u64 = 6;
-	pub const ContractFee: u64 = 21;
-	pub const CallBaseFee: u64 = 135;
-	pub const InstantiateBaseFee: u64 = 175;
 	pub const MaxDepth: u32 = 100;
 	pub const MaxValueSize: u32 = 16_384;
 }
-impl Trait for Test {
+
+parameter_types! {
+	pub const TransactionBaseFee: u64 = 2;
+	pub const TransactionByteFee: u64 = 6;
+}
+
+impl Convert<Weight, BalanceOf<Self>> for Test {
+	fn convert(w: Weight) -> BalanceOf<Self> {
+		w
+	}
+}
+
+impl pallet_transaction_payment::Trait for Test {
 	type Currency = Balances;
+	type OnTransactionPayment = ();
+	type TransactionBaseFee = TransactionBaseFee;
+	type TransactionByteFee = TransactionByteFee;
+	type WeightToFee = Test;
+	type FeeMultiplierUpdate = ();
+}
+
+impl Trait for Test {
 	type Time = Timestamp;
 	type Randomness = Randomness;
 	type Call = Call;
 	type DetermineContractAddress = DummyContractAddressFor;
 	type Event = MetaEvent;
-	type ComputeDispatchFee = DummyComputeDispatchFee;
 	type TrieIdGenerator = DummyTrieIdGenerator;
-	type GasPayment = ();
 	type RentPayment = ();
 	type SignedClaimHandicap = SignedClaimHandicap;
 	type TombstoneDeposit = TombstoneDeposit;
@@ -167,14 +180,8 @@ impl Trait for Test {
 	type RentByteFee = RentByteFee;
 	type RentDepositOffset = RentDepositOffset;
 	type SurchargeReward = SurchargeReward;
-	type TransactionBaseFee = TransactionBaseFee;
-	type TransactionByteFee = TransactionByteFee;
-	type ContractFee = ContractFee;
-	type CallBaseFee = CallBaseFee;
-	type InstantiateBaseFee = InstantiateBaseFee;
 	type MaxDepth = MaxDepth;
 	type MaxValueSize = MaxValueSize;
-	type BlockGasLimit = BlockGasLimit;
 }
 
 type Balances = pallet_balances::Module<Test>;
@@ -1627,22 +1634,6 @@ fn cannot_self_destruct_in_constructor() {
 			),
 			"contract trapped during execution"
 		);
-	});
-}
-
-#[test]
-fn check_block_gas_limit_works() {
-	ExtBuilder::default().block_gas_limit(50).build().execute_with(|| {
-		let info = DispatchInfo { weight: 100, class: DispatchClass::Normal, pays_fee: true };
-		let check = CheckBlockGasLimit::<Test>(Default::default());
-		let call: Call = crate::Call::put_code(1000, vec![]).into();
-
-		assert_eq!(
-			check.validate(&0, &call, &info, 0), InvalidTransaction::ExhaustsResources.into(),
-		);
-
-		let call: Call = crate::Call::update_schedule(Default::default()).into();
-		assert_eq!(check.validate(&0, &call, &info, 0), Ok(Default::default()));
 	});
 }
 
