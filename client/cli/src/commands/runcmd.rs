@@ -32,14 +32,6 @@ use sc_telemetry::TelemetryEndpoints;
 use structopt::StructOpt;
 use std::net::SocketAddr;
 
-/// The maximum number of characters for a node name.
-const NODE_NAME_MAX_LENGTH: usize = 32;
-
-/// default sub directory for the key store
-const DEFAULT_KEYSTORE_CONFIG_PATH : &'static str = "keystore";
-
-
-
 /// The `run` command used to run a node.
 #[derive(Debug, StructOpt, Clone)]
 pub struct RunCmd {
