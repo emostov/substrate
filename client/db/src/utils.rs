@@ -25,7 +25,7 @@ use kvdb::{KeyValueDB, DBTransaction};
 use kvdb_rocksdb::{Database, DatabaseConfig};
 use log::debug;
 
-use codec::Decode;
+use codec::{Decode,Encode};
 use sp_trie::DBValue;
 use sp_runtime::generic::BlockId;
 use sp_runtime::traits::{
@@ -59,6 +59,8 @@ pub mod meta_keys {
 	pub const LEAF_PREFIX: &[u8; 4] = b"leaf";
 	/// Children prefix list key.
 	pub const CHILDREN_PREFIX: &[u8; 8] = b"children";
+	/// Offchain indexing enablement status flag.
+	pub const OFFCHAIN_INDEXING: &[u8; 17] = b"offchain_indexing";
 }
 
 /// Database metadata.
@@ -391,6 +393,61 @@ impl DatabaseType {
 			DatabaseType::Light => "light",
 		}
 	}
+}
+
+
+
+/// Update a peristent database entry in the meta column of the DB.
+fn update_db(
+	db: &dyn KeyValueDB,
+	meta_key: &[u8],
+	meta_value: &[u8],
+) -> sp_blockchain::Result<Option<Vec<u8>>> {
+	let previous = db.get(COLUMN_META, meta_keys::OFFCHAIN_INDEXING).ok().flatten();
+
+	let write_necessary = match previous {
+		None => true,
+		Some(ref previous_val) if previous_val.as_slice() != meta_value => true,
+		_ => false,
+	};
+	if write_necessary {
+		let mut transaction = DBTransaction::new();
+		transaction.put(COLUMN_META, meta_key, meta_value);
+		db.write(transaction).map_err(db_err)?;
+	}
+	Ok(previous)
+}
+
+/// Update the offchain indexing DB.
+pub fn update_db_offchain_indexing(
+	db: &dyn KeyValueDB,
+	enable: bool,
+) -> sp_blockchain::Result<Option<bool>> {
+	let val = enable.encode();
+	let previous = update_db(db, meta_keys::OFFCHAIN_INDEXING, val.as_slice())
+		.map(move |opt| {
+			opt.map(move |raw| {
+				let val = <bool as Decode>::decode(&mut raw.as_slice()).expect("Config value from meta DB MUST be decodable");
+				val
+
+			})
+		})?;
+	Ok(previous)
+}
+
+/// Update the offchain indexing DB.
+pub fn read_db_offchain_indexing(
+	db: &dyn KeyValueDB,
+) -> sp_blockchain::Result<Option<bool>> {
+	let previous = db.get(COLUMN_META, meta_keys::OFFCHAIN_INDEXING)
+		.map(move |opt| {
+			opt.map(move |raw| {
+				let val = <bool as Decode>::decode(&mut raw.as_slice()).expect("Config value from meta DB MUST be decodable");
+				val
+			})
+		})
+		.map_err(db_err)?;
+	Ok(previous)
 }
 
 #[cfg(test)]

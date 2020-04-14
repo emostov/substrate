@@ -78,6 +78,7 @@ use sp_state_machine::{
 	backend::Backend as StateBackend, StateMachineStats,
 };
 use crate::utils::{DatabaseType, Meta, db_err, meta_keys, read_db, read_meta};
+pub use crate::utils::{update_db_offchain_indexing, read_db_offchain_indexing};
 use crate::changes_tries_storage::{DbChangesTrieStorage, DbChangesTrieStorageTransaction};
 use sc_client::leaves::{LeafSet, FinalizationDisplaced};
 use sc_state_db::StateDb;

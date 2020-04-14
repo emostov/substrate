@@ -52,7 +52,7 @@ use std::{
 use wasm_timer::SystemTime;
 use sc_telemetry::{telemetry, SUBSTRATE_INFO};
 use sp_transaction_pool::{MaintainedTransactionPool, ChainEvent};
-use sp_blockchain;
+use sp_blockchain::{self, Backend};
 
 pub type BackgroundTask = Pin<Box<dyn Future<Output=()> + Send>>;
 
@@ -146,6 +146,15 @@ type TFullParts<TBl, TRtApi, TExecDisp> = (
 	TaskManagerBuilder,
 );
 
+impl core::convert::Into<ClientConfig> for &Configuration {
+	fn into(self) -> ClientConfig {
+		ClientConfig {
+			offchain_worker_enabled : self.offchain_worker.enabled,
+			offchain_indexing_api: self.offchain_worker.indexing_enabled,
+		}
+	}
+}
+
 /// Creates a new full client for the given config.
 pub fn new_full_client<TBl, TRtApi, TExecDisp>(
 	config: &Configuration,
@@ -218,10 +227,7 @@ fn new_full_parts<TBl, TRtApi, TExecDisp>(
 			extensions,
 			Box::new(tasks_builder.spawn_handle()),
 			config.prometheus_config.as_ref().map(|config| config.registry.clone()),
-			ClientConfig {
-				offchain_worker_enabled : config.offchain_worker.enabled ,
-				offchain_indexing_api: config.offchain_worker.indexing_enabled,
-			},
+			config.into(),
 		)?
 	};
 

@@ -17,7 +17,7 @@
 //! Service configuration.
 
 pub use sc_client::ExecutionStrategies;
-pub use sc_client_db::{kvdb::KeyValueDB, PruningMode};
+pub use sc_client_db::{self, kvdb::KeyValueDB, PruningMode};
 pub use sc_network::Multiaddr;
 pub use sc_network::config::{ExtTransport, MultiaddrWithPeerId, NetworkConfiguration, Role, NodeKeyConfig};
 pub use sc_executor::WasmExecutionMethod;
@@ -138,15 +138,6 @@ pub enum DatabaseConfig {
 	/// A custom implementation of an already-open database.
 	Custom(Arc<dyn KeyValueDB>),
 }
-/// Configuration of the database of the client.
-#[derive(Clone, Default)]
-pub struct OffchainWorkerConfig {
-	/// If this is allowed.
-	pub enabled: bool,
-	/// allow writes from the runtime to the offchain worker database
-	pub indexing_enabled: bool,
-}
-
 /// Configuration of the Prometheus endpoint.
 #[derive(Clone)]
 pub struct PrometheusConfig {
@@ -173,5 +164,65 @@ impl Configuration {
 	/// Returns a string displaying the node role.
 	pub fn display_role(&self) -> String {
 		self.role.to_string()
+	}
+}
+
+
+
+/// Configuration of the database of the offchain related features.
+#[derive(Clone, Default)]
+pub struct OffchainWorkerConfig {
+	/// If this is allowed.
+	pub enabled: bool,
+	/// allow writes from the runtime to the offchain worker database
+	pub indexing_enabled: bool,
+}
+
+impl OffchainWorkerConfig {
+	/// Validate status against in DB stored flag value for indexing and update the state in the meta DB.
+	///
+	/// Indexing shall not change in between executions.
+	pub fn make_stateful(&self, db: &dyn KeyValueDB) -> Result<(), sp_blockchain::Error> {
+		let previous = sc_client_db::read_db_offchain_indexing(db)?;
+		let oicst = OffchainIndexingConfigChange::from((previous, self.indexing_enabled));
+
+		match oicst {
+			OffchainIndexingConfigChange::OnToOff =>
+				panic!("The DB requires indexing to be enabled. Start a separate DB or use ForceDisable, but be aware that re-enabling will require re-sync"),
+			OffchainIndexingConfigChange::OffToOn =>
+				panic!("Re-sync required due to config change of offchain indexing"),
+			OffchainIndexingConfigChange::Undefined | OffchainIndexingConfigChange::None => {
+				let _ = sc_client_db::update_db_offchain_indexing(db, self.indexing_enabled)?;
+			},
+		}
+		Ok(())
+	}
+}
+
+/// Configuration state transition for offchain indexing change.
+///
+/// A helper type to simplify match statements regarding verification
+/// matrix derive.
+#[derive(PartialEq,Eq,Debug,Clone,Copy)]
+enum OffchainIndexingConfigChange {
+	/// Transition from `Enabled` to `Disabled`.
+	OnToOff,
+	/// Transition from `Disabled` to `Enabled`.
+	OffToOn,
+	/// No change.
+	None,
+	/// Transition is undefined, since there was no prior value in the database.
+	Undefined,
+}
+
+impl From<(Option<bool>,bool)> for OffchainIndexingConfigChange {
+	fn from(previous_and_next: (Option<bool>,bool)) -> Self {
+		match previous_and_next {
+			(Some(true), false) => Self::OnToOff,
+			(Some(false), true) => Self::OffToOn,
+			(Some(true), true) => Self::None,
+			(Some(false), false) => Self::None,
+			(None, _) => Self::Undefined,
+		}
 	}
 }
