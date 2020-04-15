@@ -128,30 +128,40 @@ fn propagate<'a, B: BlockT, I>(
 
 		(check_fn)(who, intent, topic, &message)
 	};
+	println!("substrate propagate 1");
 
 	for (id, ref mut peer) in peers.iter_mut() {
+		println!("substrate propagate 2");
 		for (message_hash, topic, engine_id, message) in messages.clone() {
+			println!("substrate propagate 3");
 			let intent = match intent {
 				MessageIntent::Broadcast { .. } =>
 					if peer.known_messages.contains(&message_hash) {
+						println!("substrate propagate 4");
 						continue;
 					} else {
+						println!("substrate propagate 5");
 						MessageIntent::Broadcast
 					},
 				MessageIntent::PeriodicRebroadcast =>
 					if peer.known_messages.contains(&message_hash) {
+						println!("substrate propagate 6");
 						MessageIntent::PeriodicRebroadcast
 					} else {
 						// peer doesn't know message, so the logic should treat it as an
 						// initial broadcast.
+						println!("substrate propagate 7");
 						MessageIntent::Broadcast
 					},
 				other => other,
 			};
 
+			println!("substrate propagate 8");
 			if !message_allowed(id, intent, &topic, engine_id, &message) {
+				println!("substrate propagate 9 {:?} {} {:?}", topic, id, message);
 				continue;
 			}
+			println!("substrate propagate 10");
 
 			peer.known_messages.insert(message_hash.clone());
 
@@ -336,17 +346,23 @@ impl<B: BlockT> ConsensusGossip<B> {
 		-> TracingUnboundedReceiver<TopicNotification>
 	{
 		let (tx, rx) = tracing_unbounded("mpsc_gossip_messages_for");
+		println!("substrate 1 {:?}", self.messages.len());
+		println!("substrate 1.1 {:?}", self.messages.iter().filter(|e| e.topic == topic && e.engine_id == engine_id).count());
 		for entry in self.messages.iter_mut()
 			.filter(|e| e.topic == topic && e.engine_id == engine_id)
 		{
+			println!("substrate 2");
 			tx.unbounded_send(TopicNotification {
 					message: entry.message.clone(),
 					sender: entry.sender.clone(),
 				})
 				.expect("receiver known to be live; qed");
+			println!("substrate 3");
 		}
 
+		println!("substrate 4");
 		self.live_message_sinks.entry((engine_id, topic)).or_default().push(tx);
+		println!("substrate 5");
 
 		rx
 	}
