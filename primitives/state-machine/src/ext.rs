@@ -24,14 +24,13 @@ use crate::{
 
 use hash_db::Hasher;
 use sp_core::{
-	offchain::storage::OffchainOverlayedChanges,
+	offchain::{self, storage::OffchainOverlayedChanges},
 	storage::{ChildStorageKey, well_known_keys::is_child_storage_key, ChildInfo},
 	traits::Externalities, hexdisplay::HexDisplay,
 };
 use sp_trie::{trie_types::Layout, default_child_trie_root};
 use sp_externalities::Extensions;
 use codec::{Decode, Encode};
-
 use std::{error, fmt, any::{Any, TypeId}};
 use log::{warn, trace};
 
@@ -164,10 +163,9 @@ where
 {
 
 	fn set_offchain_storage(&mut self, key: &[u8], value: Option<&[u8]>) {
-		use ::sp_core::offchain::STORAGE_PREFIX;
 		match value {
-			Some(value) => self.offchain_overlay.set(STORAGE_PREFIX, key, value),
-			None => self.offchain_overlay.remove(STORAGE_PREFIX, key),
+			Some(value) => self.offchain_overlay.set(offchain::STORAGE_PREFIX, key, value),
+			None => self.offchain_overlay.remove(offchain::STORAGE_PREFIX, key),
 		}
 	}
 

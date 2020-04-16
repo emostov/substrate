@@ -1862,7 +1862,7 @@ pub(crate) mod tests {
 			state_cache_child_ratio: Some((50, 100)),
 			pruning: PruningMode::keep_blocks(1),
 			source: DatabaseSettingsSrc::Custom(backing),
-		}, 0).unwrap();
+		}, 0, &mut Default::default()).unwrap();
 		assert_eq!(backend.blockchain().info().best_number, 9);
 		for i in 0..10 {
 			assert!(backend.blockchain().hash(i).unwrap().is_some())

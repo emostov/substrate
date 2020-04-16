@@ -3056,6 +3056,7 @@ pub(crate) mod tests {
 				}
 			},
 			u64::max_value(),
+			&mut Default::default(),
 		).unwrap());
 
 		let mut client = TestClientBuilder::with_backend(backend).build();
@@ -3258,6 +3259,7 @@ pub(crate) mod tests {
 					}
 				},
 				u64::max_value(),
+				&mut Default::default(),
 		).unwrap());
 
 		let mut client = TestClientBuilder::with_backend(backend).build();
