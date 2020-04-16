@@ -71,7 +71,8 @@ pub struct LightStorage<Block: BlockT> {
 impl<Block: BlockT> LightStorage<Block> {
 	/// Create new storage with given settings.
 	pub fn new(config: DatabaseSettings) -> ClientResult<Self> {
-		let db = crate::utils::open_database::<Block>(&config, DatabaseType::Light)?;
+		let mut offchain_indexing = Default::default();
+		let db = crate::utils::open_database::<Block>(&config, DatabaseType::Light, &mut offchain_indexing)?;
 		Self::from_kvdb(db as Arc<_>)
 	}
 

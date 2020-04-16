@@ -28,7 +28,7 @@ use sc_network::config::Role;
 
 use crate::error;
 use crate::{OffchainWorkerEnabled,OffchainIndexingEnabled};
-
+use sc_client_db::offchain_indexing::{OffchainIndexingState, OffchainIndexingConfig};
 
 /// Offchain worker related parameters.
 #[derive(Debug, StructOpt, Clone)]
@@ -55,7 +55,7 @@ pub struct OffchainWorkerParams {
 		value_name = "ENABLE_OFFCHAIN_INDEXING",
 		possible_values = &OffchainIndexingEnabled::variants(),
 		case_insensitive = true,
-		default_value = "WhenValidating"
+		default_value = "Default"
     )]
 	pub indexing_enabled: OffchainIndexingEnabled,
 }
@@ -74,12 +74,26 @@ impl OffchainWorkerParams {
 			(OffchainWorkerEnabled::WhenValidating, _) => false,
 		};
 
-        let indexing_enabled = match (&self.indexing_enabled, role) {
-			(OffchainIndexingEnabled::WhenValidating, Role::Authority { .. }) => true,
-			(OffchainIndexingEnabled::Always, _) => true,
-			(OffchainIndexingEnabled::Never, _) => false,
-			(OffchainIndexingEnabled::WhenValidating, _) => false,
+
+		let state = match self.indexing_enabled {
+			OffchainIndexingEnabled::Default => OffchainIndexingState::Default,
+			OffchainIndexingEnabled::Disabled => OffchainIndexingState::Disable,
+			OffchainIndexingEnabled::Enabled => OffchainIndexingState::Enable,
+			OffchainIndexingEnabled::ForceDisabled => OffchainIndexingState::ForceDisable,
+			OffchainIndexingEnabled::ForceEnabled => OffchainIndexingState::ForceEnable,
 		};
-        Ok(OffchainWorkerConfig { enabled, indexing_enabled})
+
+		let is_validator = match role {
+			Role::Authority { .. } => true,
+			Role::Full => false,
+			Role::Light => false,
+			Role::Sentry { .. } => false,
+		};
+
+		let indexing = OffchainIndexingConfig {
+			is_validator,
+			state,
+		};
+        Ok(OffchainWorkerConfig { enabled, indexing })
 	}
 }

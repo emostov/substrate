@@ -25,7 +25,7 @@ use kvdb::{KeyValueDB, DBTransaction};
 use kvdb_rocksdb::{Database, DatabaseConfig};
 use log::debug;
 
-use codec::{Decode,Encode};
+use codec::Decode;
 use sp_trie::DBValue;
 use sp_runtime::generic::BlockId;
 use sp_runtime::traits::{
@@ -33,6 +33,7 @@ use sp_runtime::traits::{
 	UniqueSaturatedFrom, UniqueSaturatedInto,
 };
 use crate::{DatabaseSettings, DatabaseSettingsSrc};
+use crate::offchain_indexing::{OffchainIndexingConfig, check_offchain_indexing};
 
 /// Number of columns in the db. Must be the same for both full && light dbs.
 /// Otherwise RocksDb will fail to open database && check its type.
@@ -218,10 +219,11 @@ pub fn db_err(err: io::Error) -> sp_blockchain::Error {
 
 /// Open RocksDB database.
 pub fn open_database<Block: BlockT>(
-	config: &DatabaseSettings,
+	db_config: &DatabaseSettings,
 	db_type: DatabaseType,
+	offchain_indexing_config: &mut OffchainIndexingConfig,
 ) -> sp_blockchain::Result<Arc<dyn KeyValueDB>> {
-	let db: Arc<dyn KeyValueDB> = match &config.source {
+	let db: Arc<dyn KeyValueDB> = match &db_config.source {
 		#[cfg(any(feature = "kvdb-rocksdb", test))]
 		DatabaseSettingsSrc::Path { path, cache_size } => {
 			// first upgrade database to required version
@@ -256,6 +258,8 @@ pub fn open_database<Block: BlockT>(
 	};
 
 	check_database_type(&*db, db_type)?;
+
+	offchain_indexing_config.state = check_offchain_indexing(&*db, &*offchain_indexing_config)?;
 
 	Ok(db)
 }
@@ -393,61 +397,6 @@ impl DatabaseType {
 			DatabaseType::Light => "light",
 		}
 	}
-}
-
-
-
-/// Update a peristent database entry in the meta column of the DB.
-fn update_db(
-	db: &dyn KeyValueDB,
-	meta_key: &[u8],
-	meta_value: &[u8],
-) -> sp_blockchain::Result<Option<Vec<u8>>> {
-	let previous = db.get(COLUMN_META, meta_keys::OFFCHAIN_INDEXING).ok().flatten();
-
-	let write_necessary = match previous {
-		None => true,
-		Some(ref previous_val) if previous_val.as_slice() != meta_value => true,
-		_ => false,
-	};
-	if write_necessary {
-		let mut transaction = DBTransaction::new();
-		transaction.put(COLUMN_META, meta_key, meta_value);
-		db.write(transaction).map_err(db_err)?;
-	}
-	Ok(previous)
-}
-
-/// Update the offchain indexing DB.
-pub fn update_db_offchain_indexing(
-	db: &dyn KeyValueDB,
-	enable: bool,
-) -> sp_blockchain::Result<Option<bool>> {
-	let val = enable.encode();
-	let previous = update_db(db, meta_keys::OFFCHAIN_INDEXING, val.as_slice())
-		.map(move |opt| {
-			opt.map(move |raw| {
-				let val = <bool as Decode>::decode(&mut raw.as_slice()).expect("Config value from meta DB MUST be decodable");
-				val
-
-			})
-		})?;
-	Ok(previous)
-}
-
-/// Update the offchain indexing DB.
-pub fn read_db_offchain_indexing(
-	db: &dyn KeyValueDB,
-) -> sp_blockchain::Result<Option<bool>> {
-	let previous = db.get(COLUMN_META, meta_keys::OFFCHAIN_INDEXING)
-		.map(move |opt| {
-			opt.map(move |raw| {
-				let val = <bool as Decode>::decode(&mut raw.as_slice()).expect("Config value from meta DB MUST be decodable");
-				val
-			})
-		})
-		.map_err(db_err)?;
-	Ok(previous)
 }
 
 #[cfg(test)]

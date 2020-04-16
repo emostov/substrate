@@ -85,6 +85,8 @@ pub mod leaves;
 mod call_executor;
 mod client;
 mod block_rules;
+mod config;
+pub use config::{ClientExtraConfig, OffchainIndexingConfig, OffchainIndexingState};
 
 pub use sc_client_api::{
 	blockchain,
@@ -100,7 +102,7 @@ pub use crate::{
 		new_with_backend,
 		new_in_mem,
 		ImportNotifications, FinalityNotifications, BlockchainEvents, LockImportRun,
-		BlockImportNotification, Client, ClientConfig, ClientInfo, ExecutionStrategies, FinalityNotification,
+		BlockImportNotification, Client, ClientInfo, ExecutionStrategies, FinalityNotification,
 		LongestChain, BlockOf, ProvideUncles, BadBlocks, ForkBlocks, apply_aux,
 	},
 	leaves::LeafSet,

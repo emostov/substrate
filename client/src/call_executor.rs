@@ -28,7 +28,7 @@ use sp_externalities::Extensions;
 use sp_core::{NativeOrEncoded, NeverNativeValue, traits::CodeExecutor, offchain::storage::OffchainOverlayedChanges};
 use sp_api::{ProofRecorder, InitializeBlock, StorageTransactionCache};
 use sc_client_api::{backend, call_executor::CallExecutor, CloneableSpawn};
-use crate::client::ClientConfig;
+use crate::client::ClientExtraConfig;
 
 /// Call executor that executes methods locally, querying all required
 /// data from local backend.
@@ -36,7 +36,7 @@ pub struct LocalCallExecutor<B, E> {
 	backend: Arc<B>,
 	executor: E,
 	spawn_handle: Box<dyn CloneableSpawn>,
-	client_config: ClientConfig,
+	client_config: ClientExtraConfig,
 }
 
 impl<B, E> LocalCallExecutor<B, E> {
@@ -45,7 +45,7 @@ impl<B, E> LocalCallExecutor<B, E> {
 		backend: Arc<B>,
 		executor: E,
 		spawn_handle: Box<dyn CloneableSpawn>,
-		client_config: ClientConfig,
+		client_config: ClientExtraConfig,
 	) -> Self {
 		LocalCallExecutor {
 			backend,
@@ -86,7 +86,7 @@ where
 		extensions: Option<Extensions>,
 	) -> sp_blockchain::Result<Vec<u8>> {
 		let mut changes = OverlayedChanges::default();
-		let mut offchain_changes = if self.client_config.offchain_indexing_api {
+		let mut offchain_changes = if self.client_config.offchain_indexing_api.is_enabled() {
 			OffchainOverlayedChanges::enabled()
 		} else {
 			OffchainOverlayedChanges::disabled()

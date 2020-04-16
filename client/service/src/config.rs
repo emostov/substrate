@@ -28,6 +28,7 @@ use sc_chain_spec::ChainSpec;
 use sp_core::crypto::Protected;
 pub use sc_telemetry::TelemetryEndpoints;
 use prometheus_endpoint::Registry;
+use sc_client::OffchainIndexingConfig;
 
 /// Service configuration.
 pub struct Configuration {
@@ -167,15 +168,11 @@ impl Configuration {
 	}
 }
 
-
-
 /// Configuration of the database of the offchain related features.
 #[derive(Clone, Default)]
 pub struct OffchainWorkerConfig {
 	/// If this is allowed.
 	pub enabled: bool,
 	/// allow writes from the runtime to the offchain worker database
-	pub indexing_enabled: bool,
+	pub indexing: OffchainIndexingConfig,
 }
-
-

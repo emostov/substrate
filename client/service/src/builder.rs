@@ -27,7 +27,7 @@ use sc_client_api::{
 	ExecutorProvider, CallExecutor
 };
 use sp_utils::mpsc::{tracing_unbounded, TracingUnboundedSender};
-use sc_client::{Client, ClientConfig};
+use sc_client::{Client, ClientExtraConfig};
 use sc_chain_spec::get_extension;
 use sp_consensus::import_queue::ImportQueue;
 use futures::{
@@ -52,7 +52,7 @@ use std::{
 use wasm_timer::SystemTime;
 use sc_telemetry::{telemetry, SUBSTRATE_INFO};
 use sp_transaction_pool::{MaintainedTransactionPool, ChainEvent};
-use sp_blockchain::{self, Backend};
+use sp_blockchain;
 
 pub type BackgroundTask = Pin<Box<dyn Future<Output=()> + Send>>;
 
@@ -146,11 +146,11 @@ type TFullParts<TBl, TRtApi, TExecDisp> = (
 	TaskManagerBuilder,
 );
 
-impl core::convert::Into<ClientConfig> for &Configuration {
-	fn into(self) -> ClientConfig {
-		ClientConfig {
+impl core::convert::Into<ClientExtraConfig> for &Configuration {
+	fn into(self) -> ClientExtraConfig {
+		ClientExtraConfig {
 			offchain_worker_enabled : self.offchain_worker.enabled,
-			offchain_indexing_api: self.offchain_worker.indexing_enabled,
+			offchain_indexing_api: self.offchain_worker.indexing.clone(),
 		}
 	}
 }

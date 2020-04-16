@@ -138,9 +138,11 @@ arg_enum! {
 	#[allow(missing_docs)]
 	#[derive(Debug, Clone)]
 	pub enum OffchainIndexingEnabled {
-		Always,
-		Never,
-		WhenValidating,
+		Default,
+		Enabled,
+		Disabled,
+		ForceEnabled,
+		ForceDisabled,
 	}
 }
 

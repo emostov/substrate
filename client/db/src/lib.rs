@@ -39,6 +39,7 @@ mod storage_cache;
 #[cfg(any(feature = "kvdb-rocksdb", test))]
 mod upgrade;
 mod utils;
+pub mod offchain_indexing;
 mod stats;
 
 use std::sync::Arc;
@@ -78,7 +79,7 @@ use sp_state_machine::{
 	backend::Backend as StateBackend, StateMachineStats,
 };
 use crate::utils::{DatabaseType, Meta, db_err, meta_keys, read_db, read_meta};
-pub use crate::utils::{update_db_offchain_indexing, read_db_offchain_indexing};
+pub use crate::offchain_indexing::{check_offchain_indexing, OffchainIndexingConfig, OffchainIndexingState};
 use crate::changes_tries_storage::{DbChangesTrieStorage, DbChangesTrieStorageTransaction};
 use sc_client::leaves::{LeafSet, FinalizationDisplaced};
 use sc_state_db::StateDb;
@@ -295,54 +296,6 @@ pub enum DatabaseSettingsSrc {
 	Custom(Arc<dyn KeyValueDB>),
 }
 
-/// Configuration state transition for offchain indexing change.
-///
-/// A helper type to simplify match statements regarding verification
-/// matrix derive.
-#[derive(PartialEq,Eq,Debug,Clone,Copy)]
-enum OffchainIndexingConfigChange {
-	/// Transition from `Enabled` to `Disabled`.
-	OnToOff,
-	/// Transition from `Disabled` to `Enabled`.
-	OffToOn,
-	/// No change.
-	None,
-	/// Transition is undefined, since there was no prior value in the database.
-	Undefined,
-}
-
-impl From<(Option<bool>,bool)> for OffchainIndexingConfigChange {
-	fn from(previous_and_next: (Option<bool>,bool)) -> Self {
-		match previous_and_next {
-			(Some(true), false) => Self::OnToOff,
-			(Some(false), true) => Self::OffToOn,
-			(Some(true), true) => Self::None,
-			(Some(false), false) => Self::None,
-			(None, _) => Self::Undefined,
-		}
-	}
-}
-
-/// Validate status against in DB stored flag value for indexing and update the state in the meta DB.
-///
-/// Indexing shall not change in between executions.
-fn make_config_stateful(config: &sc_client::ClientConfig, db: &dyn KeyValueDB) -> Result<(), sp_blockchain::Error> {
-	// currently this only applies to offchain config
-	let previous = crate::read_db_offchain_indexing(db)?;
-	let oicst = OffchainIndexingConfigChange::from((previous, config.offchain_worker_enabled));
-
-	match oicst {
-		OffchainIndexingConfigChange::OnToOff =>
-			panic!("The DB requires indexing to be enabled. Start a separate DB or use ForceDisable, but be aware that re-enabling will require re-sync"),
-		OffchainIndexingConfigChange::OffToOn =>
-			panic!("Re-sync required due to config change of offchain indexing"),
-		OffchainIndexingConfigChange::Undefined | OffchainIndexingConfigChange::None => {
-			let _ = crate::update_db_offchain_indexing(db, config.offchain_worker_enabled)?;
-		},
-	}
-	Ok(())
-}
-
 /// Create an instance of db-backed client.
 pub fn new_client<E, Block, RA>(
 	settings: DatabaseSettings,
@@ -353,7 +306,7 @@ pub fn new_client<E, Block, RA>(
 	execution_extensions: ExecutionExtensions<Block>,
 	spawn_handle: Box<dyn CloneableSpawn>,
 	prometheus_registry: Option<Registry>,
-	config: sc_client::ClientConfig,
+	mut config: sc_client::ClientExtraConfig,
 ) -> Result<(
 		sc_client::Client<
 			Backend<Block>,
@@ -369,12 +322,11 @@ pub fn new_client<E, Block, RA>(
 		Block: BlockT,
 		E: CodeExecutor + RuntimeInfo,
 {
-	let backend = Backend::new(settings, CANONICALIZATION_DELAY)?;
-
-	let kvdb = backend.as_key_value_db();
-	make_config_stateful(&config, kvdb.as_ref())?;
-
-	let backend = Arc::new(backend);
+	let backend = Arc::new(Backend::new(
+		settings,
+		CANONICALIZATION_DELAY,
+		&mut config.offchain_indexing_api,
+	)?);
 
 	let executor = sc_client::LocalCallExecutor::new(backend.clone(), executor, spawn_handle, config.clone());
 	Ok((
@@ -851,9 +803,9 @@ impl<Block: BlockT> Backend<Block> {
 	/// Create a new instance of database backend.
 	///
 	/// The pruning window is how old a block must be before the state is pruned.
-	pub fn new(config: DatabaseSettings, canonicalization_delay: u64) -> ClientResult<Self> {
-		let db = crate::utils::open_database::<Block>(&config, DatabaseType::Full)?;
-		Self::from_kvdb(db as Arc<_>, canonicalization_delay, &config)
+	pub fn new(db_config: DatabaseSettings, canonicalization_delay: u64, offchain_indexing_api: &mut OffchainIndexingConfig) -> ClientResult<Self> {
+		let db = crate::utils::open_database::<Block>(&db_config, DatabaseType::Full, offchain_indexing_api)?;
+		Self::from_kvdb(db as Arc<_>, canonicalization_delay, &db_config)
 	}
 
 	/// Create new memory-backed client backend for tests.
@@ -867,7 +819,8 @@ impl<Block: BlockT> Backend<Block> {
 			source: DatabaseSettingsSrc::Custom(db),
 		};
 
-		Self::new(db_setting, canonicalization_delay).expect("failed to create test-db")
+		let mut offchain_indexing = Default::default();
+		Self::new(db_setting, canonicalization_delay, &mut offchain_indexing).expect("failed to create test-db")
 	}
 
 	fn from_kvdb(

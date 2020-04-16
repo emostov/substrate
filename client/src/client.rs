@@ -87,6 +87,7 @@ use crate::{
 	in_mem, genesis, cht, block_rules::{BlockRules, LookupResult as BlockLookupResult},
 };
 use crate::client::backend::KeyIterator;
+pub use crate::config::{ClientExtraConfig, OffchainIndexingConfig};
 
 /// Substrate Client
 pub struct Client<B, E, Block, RA> where Block: BlockT {
@@ -99,7 +100,7 @@ pub struct Client<B, E, Block, RA> where Block: BlockT {
 	importing_block: RwLock<Option<Block::Hash>>,
 	block_rules: BlockRules<Block>,
 	execution_extensions: ExecutionExtensions<Block>,
-	config: ClientConfig,
+	config: ClientExtraConfig,
 	_phantom: PhantomData<RA>,
 }
 
@@ -137,7 +138,7 @@ pub fn new_in_mem<E, Block, S, RA>(
 	keystore: Option<sp_core::traits::BareCryptoStorePtr>,
 	prometheus_registry: Option<Registry>,
 	spawn_handle: Box<dyn CloneableSpawn>,
-	config: ClientConfig,
+	config: ClientExtraConfig,
 ) -> sp_blockchain::Result<Client<
 	in_mem::Backend<Block>,
 	LocalCallExecutor<in_mem::Backend<Block>, E>,
@@ -159,14 +160,6 @@ pub fn new_in_mem<E, Block, S, RA>(
 	)
 }
 
-/// Relevant client configuration items relevant for the client.
-#[derive(Debug,Clone,Default)]
-pub struct ClientConfig {
-	/// Enable the offchain worker db.
-	pub offchain_worker_enabled: bool,
-	/// If true, allows access from the runtime to write into offchain worker db.
-	pub offchain_indexing_api: bool,
-}
 
 /// Create a client with the explicitly provided backend.
 /// This is useful for testing backend implementations.
@@ -177,7 +170,7 @@ pub fn new_with_backend<B, E, Block, S, RA>(
 	keystore: Option<sp_core::traits::BareCryptoStorePtr>,
 	spawn_handle: Box<dyn CloneableSpawn>,
 	prometheus_registry: Option<Registry>,
-	config: ClientConfig,
+	config: ClientExtraConfig,
 ) -> sp_blockchain::Result<Client<B, LocalCallExecutor<B, E>, Block, RA>>
 	where
 		E: CodeExecutor + RuntimeInfo,
@@ -275,7 +268,7 @@ impl<B, E, Block, RA> Client<B, E, Block, RA> where
 		bad_blocks: BadBlocks<Block>,
 		execution_extensions: ExecutionExtensions<Block>,
 		_prometheus_registry: Option<Registry>,
-		config: ClientConfig,
+		config: ClientExtraConfig,
 	) -> sp_blockchain::Result<Self> {
 		if backend.blockchain().header(BlockId::Number(Zero::zero()))?.is_none() {
 			let genesis_storage = build_genesis_storage.build_storage()?;
@@ -719,12 +712,7 @@ impl<B, E, Block, RA> Client<B, E, Block, RA> where
 					changes_trie_tx,
 				) = storage_changes.into_inner();
 
-				if self.config.offchain_indexing_api {
-					// if let Some(mut offchain_storage) = self.backend.offchain_storage() {
-					// 	offchain_sc.iter().for_each(|(k,v)| {
-					// 		offchain_storage.set(b"block-import-info", k,v)
-					// 	});
-					// }
+				if self.config.offchain_indexing_api.is_enabled() {
 					operation.op.update_offchain_storage(offchain_sc)?;
 				}
 
