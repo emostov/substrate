@@ -16,7 +16,7 @@
 
 //! In-memory implementation of offchain workers database.
 
-use std::collections::hash_map::{HashMap, Entry};
+use std::collections::hash_map::{self, HashMap, Entry};
 use crate::offchain::OffchainStorage;
 use std::iter::Iterator;
 
@@ -77,9 +77,6 @@ impl OffchainStorage for InMemOffchainStorage {
 		}
 	}
 }
-
-
-
 
 /// Change to be applied to the offchain worker db in regards to a key.
 #[derive(Debug,Clone,Hash,Eq,PartialEq)]
@@ -158,8 +155,6 @@ impl OffchainOverlayedChanges {
 	}
 }
 
-use std::collections::hash_map;
-
 /// Iterate by reference over the prepared offchain worker storage changes.
 pub struct OffchainOverlayedChangesIter<'i> {
 	inner: Option<hash_map::Iter<'i,Vec<u8>,OffchainOverlayedChange>>,
@@ -216,6 +211,7 @@ impl OffchainOverlayedChangesIntoIter {
 		}
 	}
 }
+
 
 /// Iterate over all items while draining them from the collection.
 pub struct OffchainOverlayedChangesDrain<'d> {

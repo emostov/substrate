@@ -127,7 +127,7 @@ where
 	}
 
 	/// Read only accessor for the scheduled overlay changes.
-	pub fn get_offchain_storage_changes(&self) -> &OffchainOverlayedChanges {
+	pub fn offchain_storage_changes(&self) -> &OffchainOverlayedChanges {
 		&*self.offchain_overlay
 	}
 }
