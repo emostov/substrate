@@ -140,7 +140,7 @@ impl<T: Trait> Module<T> {
 		// a very very little potential gain in the future.
 		let dispatch_info = <Extrinsic as GetDispatchInfo>::get_dispatch_info(&unchecked_extrinsic);
 
-		let partial_fee = Self::compute_fee::<T::Call>(len, &dispatch_info, 0u32.into());
+		let partial_fee = Self::compute_fee(len, &dispatch_info, 0u32.into());
 		let DispatchInfo { weight, class, .. } = dispatch_info;
 
 		RuntimeDispatchInfo { weight, class, partial_fee }
@@ -160,12 +160,12 @@ impl<T: Trait> Module<T> {
 	///      transactions can have a tip.
 	///
 	/// final_fee = base_fee + targeted_fee_adjustment(len_fee + weight_fee) + tip;
-	pub fn compute_fee<Call>(
+	pub fn compute_fee(
 		len: u32,
-		info: &DispatchInfoOf<Call>,
+		info: &DispatchInfoOf<T::Call>,
 		tip: BalanceOf<T>,
 	) -> BalanceOf<T> where
-		Call: Dispatchable<Info=DispatchInfo>,
+		T::Call: Dispatchable<Info=DispatchInfo>,
 	{
 		if info.pays_fee {
 			let len = <BalanceOf<T>>::from(len);
@@ -227,7 +227,7 @@ impl<T: Trait + Send + Sync> ChargeTransactionPayment<T> where
 		len: usize,
 	) -> Result<(BalanceOf<T>, Option<NegativeImbalanceOf<T>>), TransactionValidityError> {
 		let tip = self.0;
-		let fee = Module::<T>::compute_fee::<T::Call>(len as u32, info, tip);
+		let fee = Module::<T>::compute_fee(len as u32, info, tip);
 
 		// Only mess with balances if fee is not zero.
 		if fee.is_zero() {

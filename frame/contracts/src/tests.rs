@@ -1558,7 +1558,7 @@ fn self_destruct_works() {
 				100_000,
 				vec![],
 			),
-			Ok(())
+			Ok(_)
 		);
 
 		// Check that account is gone
