@@ -23,65 +23,61 @@ use frame_support::{
 };
 use sp_core::H256;
 // The testing primitives are very useful for avoiding having to work with signatures
-// or public keys. `u64` is used as the `AccountId` and no `Signature`s are required.
+// or public keys. 
 use sp_runtime::{Perbill, traits::{BlakeTwo256, IdentityLookup}, testing::Header};
 use sp_io;
 use crate as sudo;
 
-// This logger module used by privileged_function() to track execution.
-// Adapted from the logger in `frame/scheduler/src/lib.rs` `tests`. 
+// Logger module to track execution.
 pub mod logger {
 	use super::*;
-	use std::cell::RefCell;
 	use frame_system::ensure_root;
 
-	thread_local! {
-		static LOG: RefCell<Vec<u64>> = RefCell::new(Vec::new());
-	}
-	pub fn log() -> Vec<u64> {
-		LOG.with(|log| log.borrow().clone())
-	}
 	pub trait Trait: system::Trait {
-		type Event: From<Event> + Into<<Self as system::Trait>::Event>;
+		type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
 	}
+
 	decl_storage! {
 		trait Store for Module<T: Trait> as Logger {
+			AccountLog get(fn account_log): Vec<T::AccountId>;
+			I32Log get(fn i32_log): Vec<i32>;
 		}
 	}
+
 	decl_event! {
-		pub enum Event {
-			Logged(u64, Weight),
+		pub enum Event<T> where AccountId = <T as frame_system::Trait>::AccountId {
+			AppendI32(i32, Weight),
+			AppendI32AndAccount(AccountId, i32, Weight),
 		}
 	}
+
 	decl_module! {
 		pub struct Module<T: Trait> for enum Call where origin: <T as system::Trait>::Origin {
 			fn deposit_event() = default;
 
 			#[weight = FunctionOf(
-				|args: (&u64, &Weight)| *args.1,
-				|_: (&u64, &Weight)| DispatchClass::Normal,
+				|args: (&i32, &Weight)| *args.1,
+				DispatchClass::Normal,
 				Pays::Yes,
 			)]
-			fn log(origin, i: u64, weight: Weight){
+			fn privileged_i32_log(origin, i: i32, weight: Weight){
+				// Ensure that the `origin` is `Root`.	
 				ensure_root(origin)?;
-				Self::deposit_event(Event::Logged(i, weight));
-				LOG.with(|log| {
-					log.borrow_mut().push(i);
-				})
+				<I32Log>::append(i);
+				Self::deposit_event(RawEvent::AppendI32(i, weight));
 			}
 
 			#[weight = FunctionOf(
-				|args: (&u64, &Weight)| *args.1,
-				|_: (&u64, &Weight)| DispatchClass::Normal,
+				|args: (&i32, &Weight)| *args.1,
+				DispatchClass::Normal,
 				Pays::Yes,
 			)]
-			fn non_privileged_log(origin, i: u64, weight: Weight){
-				// Ensure that the `origin` is some signed account.
-				ensure_signed(origin)?;
-				Self::deposit_event(Event::Logged(i, weight));
-				LOG.with(|log| {
-					log.borrow_mut().push(i);
-				})
+			fn non_privileged_log(origin, i: i32, weight: Weight){
+				// Ensure that the `origin` is some signed account.		
+				let sender = ensure_signed(origin)?;
+				<I32Log>::append(i);
+				<AccountLog<T>>::append(sender.clone());
+				Self::deposit_event(RawEvent::AppendI32AndAccount(sender, i, weight));
 			}
 		}
 	}
@@ -92,14 +88,14 @@ impl_outer_origin! {
 }
 
 mod test_events {
-    pub use crate::Event;
+	pub use crate::Event;
 }
 
 impl_outer_event! {
 	pub enum TestEvent for Test {
 		system<T>,
 		sudo<T>,
-		logger,
+		logger<T>,
 	}
 }
 
@@ -159,7 +155,7 @@ impl Trait for Test {
 	type Call = Call;
 }
 
-// Assign back to type variables so we can make dispatched calls of these modules later.
+// Assign back to type variables in order to make dispatched calls of these modules later.
 pub type Sudo = Module<Test>;
 pub type Logger = logger::Module<Test>;
 pub type System = system::Module<Test>;
